@@ -65,9 +65,11 @@ This project builds a complete analytical pipeline — from raw ticketing-system
    - For **high-demand games**, cheapest available price is the #1 predictor of purchase
    - For **low-demand games**, time-of-day and days-before-game matter more than price
 
-2. **Visitor segments behave differently:** K-means clustering identifies 5 distinct visitor types (High Intent Repeat Browsers, Last Minute Browsers, Early Browsers, Premium Game Browsers, Active Session Browsers), each with different conversion drivers
+2. **Visitor behavior is the strongest overall predictor:** For prior purchasers, browsing history features (`visitor_total_visits`, `session_games_viewed`) dominate the model (AUC ~0.88). For never-purchased visitors, repeat viewing behavior (`n_times_viewed_game`, `session_games_viewed`) is most predictive (AUC ~0.72). Game-level features alone achieve only AUC ~0.59.
 
-3. **Calibrated price effect:** Each $1 increase in cheapest available price reduces purchase probability by ~0.025 percentage points (calibrated via Platt scaling on XGBoost partial dependence)
+3. **Visitor segments behave differently:** K-means clustering identifies 5 distinct visitor types (High Intent Repeat Browsers, Last Minute Browsers, Early Browsers, Premium Game Browsers, Active Session Browsers), each with different conversion drivers
+
+4. **Calibrated price effect:** Each $1 increase in cheapest available price reduces purchase probability by ~0.025 percentage points (calibrated via Platt scaling on XGBoost partial dependence)
 
 > *The findings above are from the production analysis on real data. Running these scripts on the included synthetic data will produce different results — the synthetic data preserves the data structure and pipeline logic but not the original statistical relationships.*
 
