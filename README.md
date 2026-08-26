@@ -69,6 +69,8 @@ This project builds a complete analytical pipeline — from raw ticketing-system
 
 3. **Calibrated price effect:** Each $1 increase in cheapest available price reduces purchase probability by ~0.025 percentage points (calibrated via Platt scaling on XGBoost partial dependence)
 
+> *The findings above are from the production analysis on real data. Running these scripts on the included synthetic data will produce different results — the synthetic data preserves the data structure and pipeline logic but not the original statistical relationships.*
+
 ## Setup
 
 ### Requirements
