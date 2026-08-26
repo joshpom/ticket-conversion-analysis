@@ -4,7 +4,7 @@
 
 This project builds a complete analytical pipeline — from raw ticketing-system audit logs to calibrated machine-learning models — to quantify the causal drivers of online ticket purchases for the Atlanta Braves' 2026 MLB season.
 
-> **Note:** All data in this repository is **synthetic**. The analytical methods were developed against real production data, but every dataset here was generated from scratch to protect proprietary information. Run `data/generate_synthetic_data.R` to reproduce the synthetic data.
+> **Note:** All data in this repository is **synthetic**. The analytical methods were developed against real production data, but every dataset here was generated from scratch to protect proprietary information. Run `generate_synthetic_data.R` to reproduce the synthetic data.
 
 ---
 
@@ -86,10 +86,10 @@ Keras requires a Python backend — see the [keras R package documentation](http
 ### Generate Synthetic Data
 
 ```r
-source("data/generate_synthetic_data.R")
+source("generate_synthetic_data.R")
 ```
 
-This creates all CSV files in `data/` needed by the three analysis scripts.
+This creates a `data/` folder with all CSV files needed by the three analysis scripts.
 
 ### Run the Pipeline
 
@@ -103,7 +103,7 @@ Scripts 01 and 02 overlap in scope — 01 is the exploratory prototype (with vis
 
 ## Data
 
-All data is synthetic. Run `data/generate_synthetic_data.R` to regenerate.
+All data is synthetic. Run `generate_synthetic_data.R` to regenerate.
 
 | File | Rows | Description |
 |------|------|-------------|
