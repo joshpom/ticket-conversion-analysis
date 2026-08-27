@@ -22,7 +22,15 @@ library(lubridate)
 
 set.seed(2026)
 
+# Generate random numeric strings of length n (avoids integer overflow from sample(1e18))
+rand_id <- function(len = 19, n = 1) {
+  vapply(seq_len(n), function(i) {
+    paste0(sample(0:9, len, replace = TRUE), collapse = "")
+  }, character(1))
+}
+
 out_dir <- "data"
+dir.create(out_dir, showWarnings = FALSE)
 
 cat("Generating synthetic data...\n")
 
@@ -383,7 +391,7 @@ for (v in 1:n_visits) {
     tz = "America/New_York"
   )
 
-  visitor_id <- paste0(sprintf("%019d", sample(1e18,1)), "-", sprintf("%019d", sample(1e18,1)), "-Web")
+  visitor_id <- paste0(rand_id(), "-", rand_id(), "-Web")
   session_num <- sample(1:10, 1)
   visit_id <- paste0(visitor_id, "-", session_num, "-", as.integer(visit_start))
   n_hits <- sample(2:8, 1, prob = c(4,3,2,1,1,1,1))
@@ -397,7 +405,7 @@ for (v in 1:n_visits) {
 
   for (h in 1:n_hits) {
     hit_time <- visit_start + (h-1) * sample(15:180, 1)
-    hit_id <- paste0(sprintf("%019d", sample(1e18,1)), sprintf("%019d", sample(1e18,1)))
+    hit_id <- paste0(rand_id(), rand_id())
 
     if (h < n_hits || !is_purchase) {
       pagename <- "Ticketmaster: Event Detail"
@@ -463,10 +471,10 @@ cat("  visit_event_summary.csv\n")
 
 n_summary <- 50000
 
-visitor_ids <- paste0(sprintf("%019d", sample(1e18, n_summary, replace=TRUE)), "-",
-                      sprintf("%019d", sample(1e18, n_summary, replace=TRUE)), "-Web")
+visitor_ids <- paste0(rand_id(n = n_summary), "-",
+                      rand_id(n = n_summary), "-Web")
 visit_ids <- paste0(visitor_ids, "-", sample(1:15, n_summary, replace=TRUE), "-",
-                    sample(1.77e9:1.78e9, n_summary))
+                    sample(1770000000:1780000000, n_summary))
 
 ev_indices <- sample(1:nrow(event_schedule), n_summary, replace=TRUE)
 ev_names <- event_schedule$event_id[ev_indices]

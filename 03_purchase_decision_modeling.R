@@ -47,6 +47,15 @@ if (!keras_available) {
       "      XGBoost results are unaffected.\n")
 }
 
+# ── HELPER: aligned double matrix for xgboost ───────────────────────────────
+# xgb.DMatrix requires 64-byte-aligned memory; subsetting a matrix in R can
+# produce a misaligned view.  Forcing storage.mode to "double" triggers a copy.
+aligned_dmatrix <- function(x, ...) {
+  m <- as.matrix(x)
+  storage.mode(m) <- "double"
+  xgb.DMatrix(m, ...)
+}
+
 # ── LOAD DATA ────────────────────────────────────────────────────────────────
 
 visits <- read.csv("data/visit_event_summary.csv", stringsAsFactors = FALSE) %>%
@@ -54,7 +63,9 @@ visits <- read.csv("data/visit_event_summary.csv", stringsAsFactors = FALSE) %>%
     event_date          = as.Date(event_date),
     first_hit_timestamp = as.POSIXct(first_hit_timestamp, tz = "America/New_York"),
     purchased           = as.logical(purchased),
-    days_before_game    = as.integer(event_date - as.Date(first_hit_timestamp))
+    days_before_game    = as.integer(event_date - as.Date(first_hit_timestamp)),
+    section             = as.character(section),
+    row                 = as.character(row)
   )
 
 cat("Total visits:", nrow(visits), "\n")
@@ -64,7 +75,9 @@ cat("Conversion:  ", scales::percent(mean(visits$purchased, na.rm = TRUE), accur
 # ── RECOVER MISSING SEAT INFO VIA GRANDSTAND FALLBACK ────────────────────────
 
 grandstand_orders <- read.csv("data/grandstand_orders.csv", stringsAsFactors = FALSE) %>%
-  mutate(event_date = as.Date(event_date))
+  mutate(event_date = as.Date(event_date),
+         section    = as.character(section),
+         row        = as.character(row))
 
 grandstand_fallback <- grandstand_orders %>%
   filter(!is.na(price_location)) %>%
@@ -250,21 +263,33 @@ cat("All — Prior purchasers:", nrow(df_all_repeat),
 
 run_models <- function(df, features, label, use_keras = TRUE) {
 
+  # Guard: skip if too few rows to train
+
+  if (nrow(df) < 10) {
+    cat("\n── Skipping", label, "— only", nrow(df), "rows (need >= 10) ──\n")
+    return(list(
+      data = df %>% mutate(prob_xgb = NA_real_, prob_nn = NA_real_,
+                           prob_ensemble = NA_real_, segment = label),
+      xgb_model = NULL
+    ))
+  }
+
   X <- df %>%
     select(all_of(features)) %>%
     mutate(across(where(is.logical), as.integer)) %>%
     as.matrix()
+  storage.mode(X) <- "double"   # force aligned copy (avoids xgb pointer misalignment)
 
-  y <- df$purchased
+  y <- as.integer(df$purchased)
 
   set.seed(42)
   train_idx <- sample(nrow(df), 0.8 * nrow(df))
 
-  X_train <- X[train_idx, ];  X_test  <- X[-train_idx, ]
-  y_train <- y[train_idx];    y_test  <- y[-train_idx]
+  X_train <- X[train_idx, , drop = FALSE];  X_test <- X[-train_idx, , drop = FALSE]
+  y_train <- y[train_idx];                  y_test <- y[-train_idx]
 
-  dtrain <- xgb.DMatrix(X_train, label = y_train)
-  dtest  <- xgb.DMatrix(X_test,  label = y_test)
+  dtrain <- aligned_dmatrix(X_train, label = y_train)
+  dtest  <- aligned_dmatrix(X_test,  label = y_test)
 
   xgb_model <- xgb.train(
     params = list(
@@ -307,7 +332,7 @@ run_models <- function(df, features, label, use_keras = TRUE) {
     theme(plot.subtitle = element_text(color = "#B71C1C", face = "bold"))
   print(p_imp)
 
-  prob_xgb <- predict(xgb_model, xgb.DMatrix(X))
+  prob_xgb <- predict(xgb_model, aligned_dmatrix(X))
 
   if (use_keras && keras_available) {
     prob_nn <- tryCatch({
@@ -397,7 +422,7 @@ model_df_all_scored <- bind_rows(results_all_new, results_all_repeat)
 
 plot_dist <- function(df, label) {
   df %>%
-    ggplot(aes(x = prob_ensemble, fill = factor(purchased))) +
+    ggplot(aes(x = prob_ensemble, fill = factor(as.integer(purchased)))) +
     geom_histogram(bins = 50, alpha = 0.6, position = "identity") +
     scale_fill_manual(values = c("0" = "#90CAF9", "1" = "#1565C0"),
                       labels = c("Not purchased", "Purchased")) +
@@ -407,10 +432,18 @@ plot_dist <- function(df, label) {
     theme_minimal(base_size = 12)
 }
 
-print(plot_dist(results_new,        "Never-purchased visitors (2+ games)"))
-print(plot_dist(results_repeat,     "Prior purchasers (2+ games)"))
-print(plot_dist(results_all_new,    "Never-purchased visitors (all)"))
-print(plot_dist(results_all_repeat, "Prior purchasers (all)"))
+for (.res in list(
+  list(results_new,        "Never-purchased visitors (2+ games)"),
+  list(results_repeat,     "Prior purchasers (2+ games)"),
+  list(results_all_new,    "Never-purchased visitors (all)"),
+  list(results_all_repeat, "Prior purchasers (all)")
+)) {
+  if (nrow(.res[[1]]) > 0 && any(!is.na(.res[[1]]$prob_ensemble))) {
+    print(plot_dist(.res[[1]], .res[[2]]))
+  } else {
+    cat("Skipping plot for", .res[[2]], "— no scored data.\n")
+  }
+}
 
 # ── TOP HIGH-INTENT NON-PURCHASERS ──────────────────────────────────────────
 
@@ -437,7 +470,7 @@ X_game_all <- model_df_all %>%
   mutate(across(where(is.logical), as.integer))
 
 # Platt scaling: fit logistic regression on raw predictions → calibrated probs
-train_preds_game  <- predict(xgb_model_game_all, xgb.DMatrix(as.matrix(X_game_all)))
+train_preds_game  <- predict(xgb_model_game_all, aligned_dmatrix(X_game_all))
 calib_df_game     <- tibble(pred = train_preds_game, y = model_df_all$purchased)
 calib_model_game  <- glm(y ~ pred, data = calib_df_game, family = binomial)
 calibrate_game    <- function(p) predict(calib_model_game, newdata = tibble(pred = p), type = "response")
@@ -450,7 +483,7 @@ pdp_manual <- function(feat, model, df, features, calibrate_fn = NULL) {
   )
   probs <- map_dbl(feat_range, function(val) {
     X_temp <- df %>% mutate(!!feat := val) %>% as.matrix()
-    raw    <- mean(predict(model, xgb.DMatrix(X_temp)), na.rm = TRUE)
+    raw    <- mean(predict(model, aligned_dmatrix(X_temp)), na.rm = TRUE)
     if (!is.null(calibrate_fn)) calibrate_fn(raw) else raw
   })
   tibble(x = feat_range, prob = probs) %>%
@@ -475,7 +508,7 @@ X_all_prices <- model_df_all %>%
 y <- model_df_all$purchased
 set.seed(42)
 train_idx_p <- sample(nrow(model_df_all), 0.8 * nrow(model_df_all))
-dtrain_p    <- xgb.DMatrix(as.matrix(X_all_prices[train_idx_p, ]), label = y[train_idx_p])
+dtrain_p    <- aligned_dmatrix(X_all_prices[train_idx_p, ], label = y[train_idx_p])
 
 xgb_model_prices <- xgb.train(
   params = list(
@@ -486,7 +519,7 @@ xgb_model_prices <- xgb.train(
   data = dtrain_p, nrounds = 200, verbose = 0
 )
 
-train_preds_prices <- predict(xgb_model_prices, xgb.DMatrix(as.matrix(X_all_prices)))
+train_preds_prices <- predict(xgb_model_prices, aligned_dmatrix(X_all_prices))
 calib_df_prices    <- tibble(pred = train_preds_prices, y = model_df_all$purchased)
 calib_model_prices <- glm(y ~ pred, data = calib_df_prices, family = binomial)
 calibrate_prices   <- function(p) predict(calib_model_prices, newdata = tibble(pred = p), type = "response")
@@ -538,11 +571,11 @@ X_low <- df_low_demand %>%
   mutate(across(where(is.logical), as.integer))
 
 # Calibrate each tier model
-train_preds_high <- predict(xgb_model_high, xgb.DMatrix(as.matrix(X_high)))
+train_preds_high <- predict(xgb_model_high, aligned_dmatrix(X_high))
 calib_high <- glm(df_high_demand$purchased ~ train_preds_high, family = binomial)
 calibrate_high <- function(p) predict(calib_high, newdata = tibble(train_preds_high = p), type = "response")
 
-train_preds_low <- predict(xgb_model_low, xgb.DMatrix(as.matrix(X_low)))
+train_preds_low <- predict(xgb_model_low, aligned_dmatrix(X_low))
 calib_low <- glm(df_low_demand$purchased ~ train_preds_low, family = binomial)
 calibrate_low <- function(p) predict(calib_low, newdata = tibble(train_preds_low = p), type = "response")
 
@@ -581,9 +614,20 @@ cluster_vars <- c(
   "avg_cheapest_price", "avg_dist_open"
 )
 
-X_cluster <- visitor_features %>%
+# Replace remaining NAs with column medians, then scale.
+# Drop any zero-variance columns (scale() would produce NaN).
+X_cluster_raw <- visitor_features %>%
   select(all_of(cluster_vars)) %>%
+  mutate(across(everything(), ~replace(.x, is.na(.x), median(.x, na.rm = TRUE))))
+
+# Identify columns with non-zero variance
+keep_cols <- sapply(X_cluster_raw, function(col) sd(col, na.rm = TRUE) > 0)
+X_cluster <- X_cluster_raw %>%
+  select(all_of(names(keep_cols)[keep_cols])) %>%
   scale()
+
+# Safety: replace any remaining NaN/Inf (shouldn't happen, but belt-and-suspenders)
+X_cluster[!is.finite(X_cluster)] <- 0
 
 # Elbow plot (on a sample for speed)
 set.seed(42)

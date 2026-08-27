@@ -43,7 +43,9 @@ library(lubridate)
 
 # ── LOAD DATA ────────────────────────────────────────────────────────────────
 
-manifest <- read.csv("data/manifest.csv", stringsAsFactors = FALSE)
+manifest <- read.csv("data/manifest.csv", stringsAsFactors = FALSE) %>%
+  mutate(section_name = as.character(section_name),
+         row_name     = as.character(row_name))
 
 cj_reclass <- read.csv("data/change_journal_reclass.csv", stringsAsFactors = FALSE) %>%
   mutate(upd_datetime = as.POSIXct(upd_datetime, tz = "America/New_York"))
@@ -58,12 +60,16 @@ clickstream <- read.csv("data/clickstream.csv", stringsAsFactors = FALSE) %>%
   )
 
 inventory <- read.csv("data/inventory.csv", stringsAsFactors = FALSE) %>%
-  mutate(add_datetime = as.POSIXct(add_datetime, tz = "America/New_York"))
+  mutate(add_datetime = as.POSIXct(add_datetime, tz = "America/New_York"),
+         section_name = as.character(section_name),
+         row_name     = as.character(row_name))
 
 grandstand_orders <- read.csv("data/grandstand_orders.csv", stringsAsFactors = FALSE) %>%
   mutate(
     transaction_date = as.POSIXct(transaction_date, tz = "America/New_York"),
-    event_date       = as.Date(event_date)
+    event_date       = as.Date(event_date),
+    section          = as.character(section),
+    row              = as.character(row)
   )
 
 sales_data <- read.csv("data/sales_by_date.csv", stringsAsFactors = FALSE) %>%
@@ -116,7 +122,7 @@ build_price_intervals <- function(ev) {
       # Exclude rows in the window after a Delete (before a potential re-Insert)
       in_deleted_window = !is.na(deleted_at) &
         interval_start >= deleted_at &
-        interval_start < min(upd_datetime[upd_datetime > deleted_at], na.rm = TRUE)
+        interval_start < suppressWarnings(min(upd_datetime[upd_datetime > deleted_at], na.rm = TRUE))
     ) %>%
     filter(!in_deleted_window) %>%
     ungroup() %>%
@@ -515,7 +521,7 @@ purchase_event_date <- result_linked %>%
 visits_with_date_and_purchase <- clickstream %>%
   filter(visit_id %in% visits_with_date$visit_id) %>%
   left_join(
-    result_linked %>% select(hit_id, purchase_id_linked = purchase_id, event_date),
+    result_linked %>% select(hit_id, purchase_id_linked = purchase_id, event_date_linked = event_date),
     by = "hit_id"
   ) %>%
   left_join(
@@ -523,9 +529,9 @@ visits_with_date_and_purchase <- clickstream %>%
     by = c("visit_id", "purchase_id")
   ) %>%
   mutate(
-    event_date = coalesce(event_date, event_date_from_purchase)
+    event_date = coalesce(event_date, event_date_linked, event_date_from_purchase)
   ) %>%
-  select(-event_date_from_purchase) %>%
+  select(-event_date_linked, -event_date_from_purchase) %>%
   arrange(visit_id, hit_timestamp) %>%
   mutate(hit_timestamp = as.character(hit_timestamp))
 
@@ -587,7 +593,8 @@ confirmation_lookup <- result_linked %>%
 result_game <- clickstream %>%
   filter(visit_id %in% qualifying_visits$visit_id) %>%
   left_join(
-    result_w_pc_family %>% select(hit_id, event_name, event_date, dist_open_count, cheapest_price,
+    result_w_pc_family %>% select(hit_id, event_name_snapshot = event_name,
+                                  event_date_snapshot = event_date, dist_open_count, cheapest_price,
                                   cheapest_pc_family, priciest_price, priciest_pc_family, avg_price,
                                   purchase_id_linked, pc_family, price_location),
     by = "hit_id"
@@ -598,7 +605,7 @@ result_game <- clickstream %>%
     suffix = c("", "_from_purchase")
   ) %>%
   mutate(
-    event_date               = coalesce(event_date,               event_date_from_purchase),
+    event_date               = coalesce(event_date, event_date_snapshot, event_date_from_purchase),
     pc_family                = coalesce(pc_family,                pc_family_from_purchase),
     price_location           = coalesce(price_location,           price_location_from_purchase),
     dist_open_count          = coalesce(dist_open_count,          dist_open_count_from_purchase),
@@ -608,7 +615,9 @@ result_game <- clickstream %>%
     priciest_pc_family       = coalesce(priciest_pc_family,       priciest_pc_family_from_purchase),
     avg_price                = coalesce(avg_price,                avg_price_from_purchase)
   ) %>%
-  select(-ends_with("_from_purchase")) %>%
+  select(-ends_with("_from_purchase"), -event_date_snapshot) %>%
+  mutate(event_name = coalesce(event_name, event_name_snapshot)) %>%
+  select(-event_name_snapshot) %>%
   # Grandstand fallback for unmatched confirmations
   mutate(
     order_key = case_when(

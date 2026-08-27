@@ -32,6 +32,8 @@ library(data.table)
 # ── LOAD DATA ────────────────────────────────────────────────────────────────
 
 manifest <- read.csv("data/manifest.csv", stringsAsFactors = FALSE) %>%
+  mutate(section_name = as.character(section_name),
+         row_name     = as.character(row_name)) %>%
   distinct(section_name, row_name, pc_family, price_location)
 
 cat("Pulling journal data...\n")
@@ -50,13 +52,17 @@ full_clickstream <- read.csv("data/clickstream.csv", stringsAsFactors = FALSE) %
 
 cat("Pulling inventory...\n")
 inventory <- read.csv("data/inventory.csv", stringsAsFactors = FALSE) %>%
-  mutate(add_datetime = as.POSIXct(add_datetime, tz = "America/New_York"))
+  mutate(add_datetime = as.POSIXct(add_datetime, tz = "America/New_York"),
+         section_name = as.character(section_name),
+         row_name     = as.character(row_name))
 
 cat("Pulling grandstand orders...\n")
 grandstand_orders <- read.csv("data/grandstand_orders.csv", stringsAsFactors = FALSE) %>%
   mutate(
     transaction_date = as.POSIXct(transaction_date, tz = "America/New_York"),
-    event_date       = as.Date(event_date)
+    event_date       = as.Date(event_date),
+    section          = as.character(section),
+    row              = as.character(row)
   )
 
 # ── HELPERS ──────────────────────────────────────────────────────────────────
@@ -92,7 +98,7 @@ price_intervals <- bind_rows(insert_prices, update_prices) %>%
     interval_end      = lead(upd_datetime, default = INF_TIME),
     in_deleted_window = !is.na(deleted_at) &
       interval_start >= deleted_at &
-      interval_start < min(upd_datetime[upd_datetime > deleted_at], na.rm = TRUE)
+      interval_start < suppressWarnings(min(upd_datetime[upd_datetime > deleted_at], na.rm = TRUE))
   ) %>%
   filter(!in_deleted_window) %>%
   ungroup() %>%
@@ -287,13 +293,13 @@ price_joined <- price_snapshots[dt_hits,    roll = TRUE, on = .(event_name, hit_
 
 snapshots_all <- dist_joined[
   price_joined,
-  on = .(event_name, hit_timestamp)
+  on = .(event_name, hit_timestamp, hit_id)
 ] %>% as_tibble()
 
 # ── JOIN SNAPSHOTS BACK TO FULL CLICKSTREAM ──────────────────────────────────
 
 result <- full_clickstream %>%
-  left_join(snapshots_all, by = c("event_name", "hit_timestamp"))
+  left_join(snapshots_all, by = c("hit_id", "event_name", "hit_timestamp"))
 
 cat("Rows in result:", nrow(result), "\n")
 

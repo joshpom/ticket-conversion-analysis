@@ -75,7 +75,11 @@ This project builds a complete analytical pipeline - from raw ticketing-system a
 
 ## Setup
 
-### Requirements
+### 1. Open the project
+
+Open **`portfolio.Rproj`** in RStudio or Positron. This sets the working directory to `portfolio/` so all file paths resolve correctly.
+
+### 2. Install packages
 
 ```r
 install.packages(c(
@@ -85,17 +89,17 @@ install.packages(c(
 ))
 ```
 
-Keras requires a Python backend — see the [keras R package documentation](https://keras.posit.co/) for setup.
+Keras requires a Python backend — see the [keras R package documentation](https://keras.posit.co/) for setup. If unavailable, Script 03 falls back to XGBoost-only (no neural network ensemble).
 
-### Generate Synthetic Data
+### 3. Generate synthetic data
 
 ```r
 source("data/generate_synthetic_data.R")
 ```
 
-This creates a `data/` folder with all CSV files needed by the three analysis scripts.
+This populates the `data/` folder with all CSV files needed by the three analysis scripts.
 
-### Run the Pipeline
+### 4. Run the pipeline
 
 ```r
 source("01_snapshot_engine.R")             # prototype + dashboards for 2 games
