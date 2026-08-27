@@ -90,7 +90,7 @@ Keras requires a Python backend — see the [keras R package documentation](http
 ### Generate Synthetic Data
 
 ```r
-source("generate_synthetic_data.R")
+source("data/generate_synthetic_data.R")
 ```
 
 This creates a `data/` folder with all CSV files needed by the three analysis scripts.

@@ -1,5 +1,5 @@
 # ══════════════════════════════════════════════════════════════════════════════
-# 04 — Purchase Decision Modeling
+# 03 — Purchase Decision Modeling
 # ══════════════════════════════════════════════════════════════════════════════
 #
 # PURPOSE:
@@ -28,13 +28,24 @@
 
 library(tidyverse)
 library(xgboost)
-library(keras)
 library(pdp)
 library(pROC)
 library(patchwork)
 library(cluster)
 library(factoextra)
 library(ggrepel)
+
+# Keras requires a Python + TensorFlow backend. If unavailable, the pipeline
+# falls back to XGBoost-only (no neural network ensemble component).
+keras_available <- tryCatch({
+  library(keras)
+  is_keras_available()
+}, error = function(e) FALSE)
+
+if (!keras_available) {
+  cat("NOTE: Keras/TensorFlow not available — neural network models will be skipped.\n",
+      "      XGBoost results are unaffected.\n")
+}
 
 # ── LOAD DATA ────────────────────────────────────────────────────────────────
 
@@ -298,39 +309,44 @@ run_models <- function(df, features, label, use_keras = TRUE) {
 
   prob_xgb <- predict(xgb_model, xgb.DMatrix(X))
 
-  if (use_keras) {
-    X_scaled   <- scale(X)
-    X_train_sc <- X_scaled[train_idx, ]
-    X_test_sc  <- X_scaled[-train_idx, ]
+  if (use_keras && keras_available) {
+    prob_nn <- tryCatch({
+      X_scaled   <- scale(X)
+      X_train_sc <- X_scaled[train_idx, ]
+      X_test_sc  <- X_scaled[-train_idx, ]
 
-    model_nn <- keras_model_sequential() %>%
-      layer_dense(units = 32, activation = "relu", input_shape = ncol(X_train_sc)) %>%
-      layer_dropout(rate = 0.2) %>%
-      layer_dense(units = 16, activation = "relu") %>%
-      layer_dense(units = 1,  activation = "sigmoid")
+      model_nn <- keras_model_sequential() %>%
+        layer_dense(units = 32, activation = "relu", input_shape = ncol(X_train_sc)) %>%
+        layer_dropout(rate = 0.2) %>%
+        layer_dense(units = 16, activation = "relu") %>%
+        layer_dense(units = 1,  activation = "sigmoid")
 
-    model_nn %>% compile(
-      optimizer = optimizer_adam(learning_rate = 0.01),
-      loss      = "binary_crossentropy",
-      metrics   = list(metric_auc())
-    )
+      model_nn %>% compile(
+        optimizer = optimizer_adam(learning_rate = 0.01),
+        loss      = "binary_crossentropy",
+        metrics   = list(metric_auc())
+      )
 
-    history <- model_nn %>% fit(
-      X_train_sc, y_train,
-      epochs          = 50,
-      batch_size      = 256,
-      validation_data = list(X_test_sc, y_test),
-      callbacks       = list(
-        callback_early_stopping(patience = 5, restore_best_weights = TRUE)
-      ),
-      verbose = 0
-    )
+      history <- model_nn %>% fit(
+        X_train_sc, y_train,
+        epochs          = 50,
+        batch_size      = 256,
+        validation_data = list(X_test_sc, y_test),
+        callbacks       = list(
+          callback_early_stopping(patience = 5, restore_best_weights = TRUE)
+        ),
+        verbose = 0
+      )
 
-    cat("\n──", label, "Keras evaluation ──\n")
-    print(model_nn %>% evaluate(X_test_sc, y_test))
-    plot(history)
+      cat("\n──", label, "Keras evaluation ──\n")
+      print(model_nn %>% evaluate(X_test_sc, y_test))
+      plot(history)
 
-    prob_nn <- as.vector(model_nn %>% predict(X_scaled))
+      as.vector(model_nn %>% predict(X_scaled))
+    }, error = function(e) {
+      cat("\n  Keras failed for", label, "— falling back to XGBoost-only:", conditionMessage(e), "\n")
+      rep(NA_real_, nrow(df))
+    })
   } else {
     prob_nn <- rep(NA_real_, nrow(df))
   }

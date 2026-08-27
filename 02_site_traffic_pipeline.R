@@ -1,13 +1,13 @@
 # ══════════════════════════════════════════════════════════════════════════════
-# 03 — Production-Scale Site Traffic Pipeline
+# 02 — Production-Scale Site Traffic Pipeline
 # ══════════════════════════════════════════════════════════════════════════════
 #
 # PURPOSE:
-#   Scaled, vectorized version of the snapshot engine (Script 02) that processes
+#   Scaled, vectorized version of the snapshot engine (Script 01) that processes
 #   ALL ~80 games in a single pass. This is the production pipeline that feeds
 #   the modeling script.
 #
-# IMPROVEMENTS OVER SCRIPT 02:
+# IMPROVEMENTS OVER SCRIPT 01:
 #   - All events processed at once (no per-event function calls for intervals)
 #   - Vectorized price/class interval construction with group_by(event_name)
 #   - Vectorized DIST-OPEN history calculation

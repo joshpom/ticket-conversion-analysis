@@ -1,5 +1,5 @@
 # ══════════════════════════════════════════════════════════════════════════════
-# 02 — Temporal Snapshot Engine & Game Tracking Dashboards
+# 01 — Temporal Snapshot Engine & Game Tracking Dashboards
 # ══════════════════════════════════════════════════════════════════════════════
 #
 # PURPOSE:
@@ -19,7 +19,7 @@
 #      in the same visit, then join ticket order details.
 #   6. Generate game tracking dashboards (ggplot2 + patchwork).
 #
-# This is the PROTOTYPE version processing 2 focus games. See Script 03 for
+# This is the PROTOTYPE version processing 2 focus games. See Script 02 for
 # the production-scale pipeline that handles all ~80 games.
 #
 # INPUT:
