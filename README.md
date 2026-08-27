@@ -2,7 +2,7 @@
 
 **How do real-time price changes and seat availability affect whether a website visitor buys a ticket?**
 
-This project builds a complete analytical pipeline — from raw ticketing-system audit logs to calibrated machine-learning models — to quantify the causal drivers of online ticket purchases for the Atlanta Braves' 2026 MLB season.
+This project builds a complete analytical pipeline - from raw ticketing-system audit logs to calibrated machine-learning models - to quantify the causal drivers of online ticket purchases for the Atlanta Braves' 2026 MLB season.
 
 > **Note:** All data in this repository is **synthetic**. The analytical methods were developed against real production data, but every dataset here was generated from scratch to protect proprietary information. Run `generate_synthetic_data.R` to reproduce the synthetic data.
 
@@ -71,7 +71,7 @@ This project builds a complete analytical pipeline — from raw ticketing-system
 
 4. **Calibrated price effect:** Each $1 increase in cheapest available price reduces purchase probability by ~0.025 percentage points (calibrated via Platt scaling on XGBoost partial dependence)
 
-> *The findings above are from the production analysis on real data. Running these scripts on the included synthetic data will produce different results — the synthetic data preserves the data structure and pipeline logic but not the original statistical relationships.*
+> *The findings above are from the production analysis on real data. Running these scripts on the included synthetic data will produce different results - the synthetic data preserves the data structure and pipeline logic but not the original statistical relationships.*
 
 ## Setup
 
